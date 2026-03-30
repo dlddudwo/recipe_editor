@@ -87,6 +87,8 @@ namespace AMI_Manager.Forms.Main
 
             treeViewJson.AfterLabelEdit += new NodeLabelEditEventHandler(treeViewJson_AfterLabelEdit);
             treeViewJson.GetType().GetProperty("DoubleBuffered", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(treeViewJson, true);
+            treeViewJson.Scrollable = true;
+            treeViewJson.ShowNodeToolTips = true;
 
             LoadPreviousFilePath();
             LoadPreviousFolderPath();
@@ -155,6 +157,7 @@ namespace AMI_Manager.Forms.Main
             treeViewJson.Nodes.Clear();
             TreeNode rootNode = new TreeNode("Root");
             AddNodes(jsonObject, rootNode);
+            UpdateNodeToolTips(rootNode);
             treeViewJson.Nodes.Add(rootNode);
             //treeView1.ExpandAll();
 
@@ -371,6 +374,7 @@ namespace AMI_Manager.Forms.Main
                     }
 
                     TreeNode newNode = new TreeNode(temp_object_str);
+                    newNode.ToolTipText = newNode.Text;
                     treeViewJson.SelectedNode.Nodes.Add(newNode);
 
                     Add_Json(jsonObject, treeViewJson.SelectedNode, json_type.Obejct);
@@ -420,6 +424,7 @@ namespace AMI_Manager.Forms.Main
 
                     string temp_key_str = "NEW_KEY" + (treeViewJson.SelectedNode.Nodes.Count + 1).ToString(nodes_cnt) + ":" + "NEW_VALUE" + (treeViewJson.SelectedNode.Nodes.Count + 1).ToString(nodes_cnt);
                     TreeNode newNode = new TreeNode(temp_key_str);
+                    newNode.ToolTipText = newNode.Text;
                     treeViewJson.SelectedNode.Nodes.Add(newNode);
 
                     Add_Json(jsonObject, treeViewJson.SelectedNode, json_type.Value);
@@ -472,6 +477,7 @@ namespace AMI_Manager.Forms.Main
 
                     string temp_array_str = "NEW_ARRAY" + (treeViewJson.SelectedNode.Nodes.Count + 1).ToString(nodes_cnt);
                     TreeNode newNode = new TreeNode(temp_array_str);
+                    newNode.ToolTipText = newNode.Text;
                     treeViewJson.SelectedNode.Nodes.Add(newNode);
 
 
@@ -911,6 +917,7 @@ namespace AMI_Manager.Forms.Main
                     }
 
                 }
+                treeViewJson.SelectedNode.ToolTipText = treeViewJson.SelectedNode.Text;
                 return;
             }
             catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException || ex is NullReferenceException || ex is Newtonsoft.Json.JsonException)
@@ -1196,6 +1203,7 @@ namespace AMI_Manager.Forms.Main
             foreach (TreeNode childNode in sourceNode.Nodes)
             {
                 TreeNode newNode = new TreeNode(childNode.Text);
+                newNode.ToolTipText = childNode.Text;
                 newNode.Tag = childNode.Tag;
                 newNode.ImageIndex = childNode.ImageIndex;
                 newNode.SelectedImageIndex = childNode.SelectedImageIndex;
@@ -1204,6 +1212,15 @@ namespace AMI_Manager.Forms.Main
                 CopyNodes(childNode, newNode);
             }
 
+        }
+
+        private void UpdateNodeToolTips(TreeNode node)
+        {
+            node.ToolTipText = node.Text;
+            foreach (TreeNode child in node.Nodes)
+            {
+                UpdateNodeToolTips(child);
+            }
         }
 
 
