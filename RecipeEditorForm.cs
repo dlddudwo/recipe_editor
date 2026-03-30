@@ -51,6 +51,7 @@ namespace AMI_Manager.Forms.Main
 
         static string settingsFilePath = global::AMI_Manager.Properties.Resources.settingsFilePath;
         static string settingsFolderPath = global::AMI_Manager.Properties.Resources.settingFolderPath;
+        static readonly Encoding settingsEncoding = new UTF8Encoding(false);
 
 
         //string settingsFilePath = @"settings.txt";
@@ -93,9 +94,10 @@ namespace AMI_Manager.Forms.Main
 
         private void LoadPreviousFilePath()
         {
-            if (File.Exists(settingsFilePath))
+            string previousFilePath = ReadSettingPath(settingsFilePath);
+            if (!string.IsNullOrWhiteSpace(previousFilePath))
             {
-                jsonFilePath = File.ReadAllText(settingsFilePath);
+                jsonFilePath = previousFilePath;
                 LoadJson(jsonFilePath);
                 PopulateTreeView();
             }
@@ -107,9 +109,10 @@ namespace AMI_Manager.Forms.Main
 
         private void LoadPreviousFolderPath()
         {
-            if (File.Exists(settingsFolderPath))
+            string previousFolderPath = ReadSettingPath(settingsFolderPath);
+            if (!string.IsNullOrWhiteSpace(previousFolderPath))
             {
-                string FolderPath = File.ReadAllText(settingsFolderPath);
+                string FolderPath = previousFolderPath;
                 LoadFilesToDataGridView(FolderPath);
             }
             else
@@ -934,6 +937,12 @@ namespace AMI_Manager.Forms.Main
                     {
                         jsonFilePath = openFileDialog.FileName;
                         SaveFilePath(jsonFilePath);
+                        string jsonDirectory = Path.GetDirectoryName(jsonFilePath);
+                        if (!string.IsNullOrWhiteSpace(jsonDirectory))
+                        {
+                            SaveFolderPath(jsonDirectory);
+                            LoadFilesToDataGridView(jsonDirectory);
+                        }
                     }
                     LoadJson(jsonFilePath);
                     PopulateTreeView();
@@ -952,8 +961,11 @@ namespace AMI_Manager.Forms.Main
                     if (MessageBox.Show("수정한 내용을 Apply 했는지 확인하고 저장해주세요", "Save", MessageBoxButtons.YesNo) == DialogResult.Yes)
                     {
                         SaveJson();
-                        JsonfolderPath = File.ReadAllText(settingsFolderPath);
-                        LoadFilesToDataGridView(JsonfolderPath);
+                        JsonfolderPath = ReadSettingPath(settingsFolderPath);
+                        if (!string.IsNullOrWhiteSpace(JsonfolderPath))
+                        {
+                            LoadFilesToDataGridView(JsonfolderPath);
+                        }
                     }
                     else
                     {
@@ -1054,12 +1066,49 @@ namespace AMI_Manager.Forms.Main
 
         static void SaveFilePath(string path)
         {
-            File.WriteAllText(settingsFilePath, path);
+            WriteSettingPath(settingsFilePath, path);
         }
 
         static void SaveFolderPath(string path)
         {
-            File.WriteAllText(settingsFolderPath, path);
+            WriteSettingPath(settingsFolderPath, path);
+        }
+
+        static string ReadSettingPath(string settingPath)
+        {
+            if (!File.Exists(settingPath))
+                return string.Empty;
+
+            string path = File.ReadAllText(settingPath, settingsEncoding).Trim();
+            if (string.IsNullOrWhiteSpace(path))
+                return string.Empty;
+
+            try
+            {
+                return Path.GetFullPath(path);
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException)
+            {
+                return string.Empty;
+            }
+        }
+
+        static void WriteSettingPath(string settingPath, string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+
+            string normalizedPath = path.Trim();
+            try
+            {
+                normalizedPath = Path.GetFullPath(normalizedPath);
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException)
+            {
+                return;
+            }
+
+            File.WriteAllText(settingPath, normalizedPath, settingsEncoding);
         }
 
  
@@ -1099,6 +1148,11 @@ namespace AMI_Manager.Forms.Main
         {
             string datagridview_jsonpath = dataGridViewJson.Rows[e.RowIndex].Cells[2].FormattedValue.ToString();
             SaveFilePath(datagridview_jsonpath);
+            string selectedFolderPath = Path.GetDirectoryName(datagridview_jsonpath);
+            if (!string.IsNullOrWhiteSpace(selectedFolderPath))
+            {
+                SaveFolderPath(selectedFolderPath);
+            }
             LoadJson(datagridview_jsonpath);
             PopulateTreeView();
         }
@@ -1308,5 +1362,4 @@ namespace AMI_Manager.Forms.Main
 
 
 }
-
 
