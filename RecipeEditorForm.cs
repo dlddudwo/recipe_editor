@@ -136,10 +136,12 @@ namespace AMI_Manager.Forms.Main
                     string jsonText = System.IO.File.ReadAllText(json_path);
                     jsonObject = JObject.Parse(jsonText);
                     richTextBox_json.Text = jsonText;
+                    BeforeJsonText = jsonText;
                 }
                 else
                 {
                     jsonObject = new JObject();
+                    BeforeJsonText = jsonObject.ToString();
                 }
             }
             catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException || ex is Newtonsoft.Json.JsonException)
@@ -703,13 +705,11 @@ namespace AMI_Manager.Forms.Main
         {
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
             string jsonFilePathWithTimestamp = Path.Combine(Path.GetDirectoryName(jsonFilePath), Path.GetFileNameWithoutExtension(jsonFilePath) + "_" + timestamp + Path.GetExtension(jsonFilePath));
-            //if(BeforeJsonText != null) 
-            //    File.WriteAllText(jsonFilePathWithTimestamp, BeforeJsonText);
-            //else
-            //    File.WriteAllText(jsonFilePathWithTimestamp, jsonObject.ToString());
-            File.WriteAllText(jsonFilePathWithTimestamp, jsonObject.ToString());
+            string currentJsonText = jsonObject.ToString();
+            string backupSourceText = string.IsNullOrWhiteSpace(BeforeJsonText) ? currentJsonText : BeforeJsonText;
 
-            File.WriteAllText(jsonFilePath, jsonObject.ToString());
+            File.WriteAllText(jsonFilePathWithTimestamp, backupSourceText);
+            File.WriteAllText(jsonFilePath, currentJsonText);
         }
 
 
@@ -1362,4 +1362,3 @@ namespace AMI_Manager.Forms.Main
 
 
 }
-
