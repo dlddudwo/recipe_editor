@@ -709,7 +709,23 @@ namespace AMI_Manager.Forms.Main
             string backupSourceText = string.IsNullOrWhiteSpace(BeforeJsonText) ? currentJsonText : BeforeJsonText;
 
             File.WriteAllText(jsonFilePathWithTimestamp, backupSourceText);
-            File.WriteAllText(jsonFilePath, currentJsonText);
+            BeforeJsonText = currentJsonText;
+        }
+
+        private void ApplyJsonToCurrentFile()
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(jsonFilePath))
+                    return;
+
+                string currentJsonText = jsonObject.ToString();
+                File.WriteAllText(jsonFilePath, currentJsonText);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException || ex is IOException || ex is ArgumentException || ex is NotSupportedException)
+            {
+                MessageBox.Show(ex.Message, "WARNING");
+            }
         }
 
 
@@ -950,9 +966,7 @@ namespace AMI_Manager.Forms.Main
                     break;
 
                 case "BtnApply":
-
-                    //SaveJson();
-                    //BeforeJsonText = richTextBox_json.Text;
+                    ApplyJsonToCurrentFile();
                     string jsonString = jsonObject.ToString();
                     richTextBox_json.Text = jsonString;
                     break;
@@ -1147,6 +1161,7 @@ namespace AMI_Manager.Forms.Main
         private void dataGridViewJson_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
         {
             string datagridview_jsonpath = dataGridViewJson.Rows[e.RowIndex].Cells[2].FormattedValue.ToString();
+            jsonFilePath = datagridview_jsonpath;
             SaveFilePath(datagridview_jsonpath);
             string selectedFolderPath = Path.GetDirectoryName(datagridview_jsonpath);
             if (!string.IsNullOrWhiteSpace(selectedFolderPath))
