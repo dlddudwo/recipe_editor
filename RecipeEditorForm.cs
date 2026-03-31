@@ -100,6 +100,7 @@ namespace AMI_Manager.Forms.Main
             CreateCustomTitleBar();
 
             treeViewJson.NodeMouseClick += TreeView_NodeMouseClick;
+            treeViewJson.AfterSelect += TreeViewJson_AfterSelect_ShowFullText;
             objectToolStripMenuItem.Click += objectToolStripMenuItem_Click;
             valueToolStripMenuItem.Click += valueToolStripMenuItem_Click;
             arrayToolStripMenuItem.Click += arrayToolStripMenuItem_Click;
@@ -115,6 +116,7 @@ namespace AMI_Manager.Forms.Main
             treeViewJson.DrawMode = TreeViewDrawMode.Normal;
             treeViewJson.HandleCreated += (s, e) => EnableTreeViewHorizontalScrollBar();
             treeViewJson.Resize += (s, e) => EnableTreeViewHorizontalScrollBar();
+            AdjustTreeViewLayoutWidth();
 
             LoadPreviousFilePath();
             LoadPreviousFolderPath();
@@ -128,6 +130,19 @@ namespace AMI_Manager.Forms.Main
             SetWindowLong32(treeViewJson.Handle, GWL_STYLE, style);
             SetWindowPos(treeViewJson.Handle, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
             ShowScrollBar(treeViewJson.Handle, SB_HORZ, true);
+        }
+
+        private void AdjustTreeViewLayoutWidth()
+        {
+            if (tableLayoutPanel1 == null || tableLayoutPanel1.ColumnStyles.Count < 3)
+                return;
+
+            if (tableLayoutPanel1.ColumnStyles[1].SizeType == SizeType.Percent &&
+                tableLayoutPanel1.ColumnStyles[2].SizeType == SizeType.Percent)
+            {
+                tableLayoutPanel1.ColumnStyles[1].Width = 45F; // TreeView 영역 확장
+                tableLayoutPanel1.ColumnStyles[2].Width = 22F; // Text 영역 축소
+            }
         }
 
         private void LoadPreviousFilePath()
@@ -357,6 +372,15 @@ namespace AMI_Manager.Forms.Main
             {
                 rtbNodeLocation.Text = GetNodePath(node, Get_node_mode.Inform);
             }
+        }
+
+        private void TreeViewJson_AfterSelect_ShowFullText(object sender, TreeViewEventArgs e)
+        {
+            if (e.Node == null)
+                return;
+
+            string nodePath = GetNodePath(e.Node, Get_node_mode.Inform);
+            rtbNodeLocation.Text = $"NODE: {e.Node.Text}{Environment.NewLine}PATH: {nodePath}";
         }
 
         private void TreeView_NodeMouseClick(object sender, TreeNodeMouseClickEventArgs e)
