@@ -396,6 +396,7 @@ namespace AMI_Manager.Forms.Main
                 return;
 
             rtbNodeLocation.Text = BuildNodeDetailText(e.Node);
+            ScrollRichTextToNode(e.Node);
         }
 
         private string BuildNodeDetailText(TreeNode node)
@@ -430,6 +431,47 @@ namespace AMI_Manager.Forms.Main
             }
 
             return $"NODE: {fullNodeText}{Environment.NewLine}PATH: {nodePath}";
+        }
+
+        private void ScrollRichTextToNode(TreeNode node)
+        {
+            if (jsonObject == null || string.IsNullOrWhiteSpace(richTextBox_json.Text))
+                return;
+
+            try
+            {
+                string selectPath = Select_json_path(node, Path_skip_mode.Skip).Replace("/", ".");
+                if (selectPath.Contains(":"))
+                {
+                    selectPath = selectPath.Substring(0, selectPath.LastIndexOf(':'));
+                }
+
+                JToken selectToken = selectPath == "Root" ? jsonObject.SelectToken("$") : jsonObject.SelectToken(selectPath);
+                string searchText = string.Empty;
+
+                if (selectToken?.Parent is JProperty property)
+                {
+                    searchText = $"\"{property.Name}\"";
+                }
+                else
+                {
+                    searchText = selectToken?.ToString() ?? string.Empty;
+                }
+
+                if (string.IsNullOrWhiteSpace(searchText))
+                    return;
+
+                int startIndex = richTextBox_json.Text.IndexOf(searchText, StringComparison.Ordinal);
+                if (startIndex < 0)
+                    return;
+
+                richTextBox_json.Select(startIndex, searchText.Length);
+                richTextBox_json.ScrollToCaret();
+            }
+            catch
+            {
+                // 선택 노드와 RichTextBox 매칭 실패 시 무시
+            }
         }
 
         private string ToNodePreview(string fullText)
