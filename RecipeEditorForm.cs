@@ -6,6 +6,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -69,6 +70,16 @@ namespace AMI_Manager.Forms.Main
         private System.Windows.Forms.TreeNode NodeSource;
         private System.Windows.Forms.TreeNode NodeTarget;
 
+        private const int GWL_STYLE = -16;
+        private const int WS_HSCROLL = 0x00100000;
+        private const int TVS_NOHSCROLL = 0x8000;
+
+        [DllImport("user32.dll", EntryPoint = "GetWindowLong", SetLastError = true)]
+        private static extern int GetWindowLong32(IntPtr hWnd, int nIndex);
+
+        [DllImport("user32.dll", EntryPoint = "SetWindowLong", SetLastError = true)]
+        private static extern int SetWindowLong32(IntPtr hWnd, int nIndex, int dwNewLong);
+
         public RecipeEditorForm(ManagerForm _managerForm)
         {
             InitializeComponent();
@@ -90,9 +101,18 @@ namespace AMI_Manager.Forms.Main
             treeViewJson.Scrollable = true;
             treeViewJson.ShowNodeToolTips = true;
             treeViewJson.DrawMode = TreeViewDrawMode.Normal;
+            treeViewJson.HandleCreated += (s, e) => EnableTreeViewHorizontalScrollBar();
 
             LoadPreviousFilePath();
             LoadPreviousFolderPath();
+        }
+
+        private void EnableTreeViewHorizontalScrollBar()
+        {
+            int style = GetWindowLong32(treeViewJson.Handle, GWL_STYLE);
+            style |= WS_HSCROLL;
+            style &= ~TVS_NOHSCROLL;
+            SetWindowLong32(treeViewJson.Handle, GWL_STYLE, style);
         }
 
         private void LoadPreviousFilePath()
