@@ -1239,9 +1239,15 @@ namespace AMI_Manager.Forms.Main
                     if (MessageBox.Show("수정한 내용을 Apply 했는지 확인하고 저장해주세요", "Save", MessageBoxButtons.YesNo) == DialogResult.Yes)
                     {
                         SaveJson();
-                        JsonfolderPath = ReadSettingPath(settingsFolderPath);
+                        JsonfolderPath = Path.GetDirectoryName(jsonFilePath);
+                        if (string.IsNullOrWhiteSpace(JsonfolderPath))
+                        {
+                            JsonfolderPath = ReadSettingPath(settingsFolderPath);
+                        }
+
                         if (!string.IsNullOrWhiteSpace(JsonfolderPath))
                         {
+                            SaveFolderPath(JsonfolderPath);
                             LoadFilesToDataGridView(JsonfolderPath);
                         }
                     }
