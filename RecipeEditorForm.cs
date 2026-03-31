@@ -79,6 +79,8 @@ namespace AMI_Manager.Forms.Main
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_NOZORDER = 0x0004;
         private const uint SWP_FRAMECHANGED = 0x0020;
+        private const int TV_FIRST = 0x1100;
+        private const int TVM_GETEDITCONTROL = TV_FIRST + 15;
 
         [DllImport("user32.dll", EntryPoint = "GetWindowLong", SetLastError = true)]
         private static extern int GetWindowLong32(IntPtr hWnd, int nIndex);
@@ -91,6 +93,12 @@ namespace AMI_Manager.Forms.Main
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
 
         public RecipeEditorForm(ManagerForm _managerForm)
         {
@@ -110,6 +118,7 @@ namespace AMI_Manager.Forms.Main
 
 
             treeViewJson.AfterLabelEdit += new NodeLabelEditEventHandler(treeViewJson_AfterLabelEdit);
+            treeViewJson.BeforeLabelEdit += treeViewJson_BeforeLabelEdit;
             treeViewJson.GetType().GetProperty("DoubleBuffered", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(treeViewJson, true);
             treeViewJson.Scrollable = true;
             treeViewJson.ShowNodeToolTips = true;
@@ -424,6 +433,27 @@ namespace AMI_Manager.Forms.Main
                 treeViewJson.SelectedNode = e.Node;
                 contextMenuStrip1.Show(treeViewJson, e.Location);
             }
+        }
+
+        private void treeViewJson_BeforeLabelEdit(object sender, NodeLabelEditEventArgs e)
+        {
+            BeginInvoke(new Action(() =>
+            {
+                if (e.Node == null)
+                    return;
+
+                IntPtr editHandle = SendMessage(treeViewJson.Handle, TVM_GETEDITCONTROL, IntPtr.Zero, IntPtr.Zero);
+                if (editHandle == IntPtr.Zero)
+                    return;
+
+                Rectangle bounds = e.Node.Bounds;
+                int editX = bounds.Left;
+                int editY = bounds.Top;
+                int editWidth = Math.Max(300, treeViewJson.ClientSize.Width - editX - 8);
+                int editHeight = Math.Max(bounds.Height + 6, 24);
+
+                MoveWindow(editHandle, editX, editY, editWidth, editHeight, true);
+            }));
         }
 
         private void objectToolStripMenuItem_Click(object sender, EventArgs e)
