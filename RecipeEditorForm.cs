@@ -370,7 +370,7 @@ namespace AMI_Manager.Forms.Main
             TreeNode node = treeViewJson.GetNodeAt(e.X, e.Y);
             if (node != null)
             {
-                rtbNodeLocation.Text = GetNodePath(node, Get_node_mode.Inform);
+                rtbNodeLocation.Text = BuildNodeDetailText(node);
             }
         }
 
@@ -379,8 +379,41 @@ namespace AMI_Manager.Forms.Main
             if (e.Node == null)
                 return;
 
-            string nodePath = GetNodePath(e.Node, Get_node_mode.Inform);
-            rtbNodeLocation.Text = $"NODE: {e.Node.Text}{Environment.NewLine}PATH: {nodePath}";
+            rtbNodeLocation.Text = BuildNodeDetailText(e.Node);
+        }
+
+        private string BuildNodeDetailText(TreeNode node)
+        {
+            string nodePath = GetNodePath(node, Get_node_mode.Inform);
+            string fullNodeText = node.Text;
+
+            try
+            {
+                string selectPath = Select_json_path(node, Path_skip_mode.Skip).Replace("/", ".");
+                if (selectPath.Contains(":"))
+                {
+                    selectPath = selectPath.Substring(0, selectPath.LastIndexOf(':'));
+                }
+
+                JToken selectToken = selectPath == "Root" ? jsonObject.SelectToken("$") : jsonObject.SelectToken(selectPath);
+                if (selectToken != null)
+                {
+                    if (selectToken is JValue && selectToken.Parent is JProperty property)
+                    {
+                        fullNodeText = $"{property.Name}:{selectToken}";
+                    }
+                    else if (selectToken.Type != JTokenType.Object && selectToken.Type != JTokenType.Array)
+                    {
+                        fullNodeText = selectToken.ToString();
+                    }
+                }
+            }
+            catch
+            {
+                // 경로 해석 실패 시 기본 노드 텍스트를 그대로 사용
+            }
+
+            return $"NODE: {fullNodeText}{Environment.NewLine}PATH: {nodePath}";
         }
 
         private void TreeView_NodeMouseClick(object sender, TreeNodeMouseClickEventArgs e)
