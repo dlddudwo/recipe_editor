@@ -73,12 +73,24 @@ namespace AMI_Manager.Forms.Main
         private const int GWL_STYLE = -16;
         private const int WS_HSCROLL = 0x00100000;
         private const int TVS_NOHSCROLL = 0x8000;
+        private const int SB_HORZ = 0;
+        private static readonly IntPtr HWND_TOP = IntPtr.Zero;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOZORDER = 0x0004;
+        private const uint SWP_FRAMECHANGED = 0x0020;
 
         [DllImport("user32.dll", EntryPoint = "GetWindowLong", SetLastError = true)]
         private static extern int GetWindowLong32(IntPtr hWnd, int nIndex);
 
         [DllImport("user32.dll", EntryPoint = "SetWindowLong", SetLastError = true)]
         private static extern int SetWindowLong32(IntPtr hWnd, int nIndex, int dwNewLong);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool ShowScrollBar(IntPtr hWnd, int wBar, bool bShow);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
         public RecipeEditorForm(ManagerForm _managerForm)
         {
@@ -102,6 +114,7 @@ namespace AMI_Manager.Forms.Main
             treeViewJson.ShowNodeToolTips = true;
             treeViewJson.DrawMode = TreeViewDrawMode.Normal;
             treeViewJson.HandleCreated += (s, e) => EnableTreeViewHorizontalScrollBar();
+            treeViewJson.Resize += (s, e) => EnableTreeViewHorizontalScrollBar();
 
             LoadPreviousFilePath();
             LoadPreviousFolderPath();
@@ -113,6 +126,8 @@ namespace AMI_Manager.Forms.Main
             style |= WS_HSCROLL;
             style &= ~TVS_NOHSCROLL;
             SetWindowLong32(treeViewJson.Handle, GWL_STYLE, style);
+            SetWindowPos(treeViewJson.Handle, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+            ShowScrollBar(treeViewJson.Handle, SB_HORZ, true);
         }
 
         private void LoadPreviousFilePath()
@@ -180,6 +195,7 @@ namespace AMI_Manager.Forms.Main
             AddNodes(jsonObject, rootNode);
             UpdateNodeToolTips(rootNode);
             treeViewJson.Nodes.Add(rootNode);
+            EnableTreeViewHorizontalScrollBar();
             //treeView1.ExpandAll();
 
         }
@@ -939,6 +955,7 @@ namespace AMI_Manager.Forms.Main
 
                 }
                 treeViewJson.SelectedNode.ToolTipText = treeViewJson.SelectedNode.Text;
+                EnableTreeViewHorizontalScrollBar();
                 return;
             }
             catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException || ex is NullReferenceException || ex is Newtonsoft.Json.JsonException)
