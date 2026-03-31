@@ -89,9 +89,7 @@ namespace AMI_Manager.Forms.Main
             treeViewJson.GetType().GetProperty("DoubleBuffered", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(treeViewJson, true);
             treeViewJson.Scrollable = true;
             treeViewJson.ShowNodeToolTips = true;
-            treeViewJson.DrawMode = TreeViewDrawMode.OwnerDrawText;
-            treeViewJson.ItemHeight = 36;
-            treeViewJson.DrawNode += TreeViewJson_DrawNode;
+            treeViewJson.DrawMode = TreeViewDrawMode.Normal;
 
             LoadPreviousFilePath();
             LoadPreviousFolderPath();
@@ -323,31 +321,6 @@ namespace AMI_Manager.Forms.Main
             {
                 rtbNodeLocation.Text = GetNodePath(node, Get_node_mode.Inform);
             }
-        }
-
-        private void TreeViewJson_DrawNode(object sender, DrawTreeNodeEventArgs e)
-        {
-            Color foreColor = ((e.State & TreeNodeStates.Selected) == TreeNodeStates.Selected) ? SystemColors.HighlightText : treeViewJson.ForeColor;
-            Color backColor = ((e.State & TreeNodeStates.Selected) == TreeNodeStates.Selected) ? SystemColors.Highlight : treeViewJson.BackColor;
-
-            using (SolidBrush backBrush = new SolidBrush(backColor))
-            {
-                e.Graphics.FillRectangle(backBrush, e.Bounds);
-            }
-
-            Rectangle textBounds = new Rectangle(
-                e.Bounds.X,
-                e.Bounds.Y,
-                Math.Max(20, treeViewJson.ClientSize.Width - e.Bounds.X - 8),
-                treeViewJson.ItemHeight);
-
-            TextRenderer.DrawText(
-                e.Graphics,
-                e.Node.Text,
-                treeViewJson.Font,
-                textBounds,
-                foreColor,
-                TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix | TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
         }
 
         private void TreeView_NodeMouseClick(object sender, TreeNodeMouseClickEventArgs e)
