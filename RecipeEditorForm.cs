@@ -1111,8 +1111,9 @@ namespace AMI_Manager.Forms.Main
                         editDialog.Size = new Size(900, 280);
 
                         textBox.Multiline = true;
-                        textBox.ScrollBars = ScrollBars.Both;
-                        textBox.WordWrap = false;
+                        textBox.ScrollBars = ScrollBars.None;
+                        textBox.WordWrap = true;
+                        textBox.AcceptsReturn = true;
                         textBox.Dock = DockStyle.Top;
                         textBox.Height = 180;
                         textBox.Text = fullNodeText;
