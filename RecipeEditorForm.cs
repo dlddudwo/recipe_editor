@@ -1103,6 +1103,8 @@ namespace AMI_Manager.Forms.Main
                     e.SuppressKeyPress = true;
                     using (var editDialog = new Form())
                     using (var textBox = new TextBox())
+                    using (var buttonPanel = new Panel())
+                    using (var buttonFlowPanel = new FlowLayoutPanel())
                     using (var okButton = new Button())
                     using (var cancelButton = new Button())
                     {
@@ -1114,23 +1116,33 @@ namespace AMI_Manager.Forms.Main
                         textBox.ScrollBars = ScrollBars.None;
                         textBox.WordWrap = true;
                         textBox.AcceptsReturn = true;
-                        textBox.Dock = DockStyle.Top;
-                        textBox.Height = 180;
+                        textBox.Dock = DockStyle.Fill;
                         textBox.Text = fullNodeText;
 
                         okButton.Text = "OK";
                         okButton.DialogResult = DialogResult.OK;
-                        okButton.Dock = DockStyle.Left;
-                        okButton.Width = 120;
+                        okButton.Size = new Size(80, 30);
 
                         cancelButton.Text = "Cancel";
                         cancelButton.DialogResult = DialogResult.Cancel;
-                        cancelButton.Dock = DockStyle.Right;
-                        cancelButton.Width = 120;
+                        cancelButton.Size = new Size(80, 30);
+
+                        buttonPanel.Dock = DockStyle.Bottom;
+                        buttonPanel.Height = 42;
+                        buttonPanel.Padding = new Padding(0, 6, 10, 6);
+
+                        buttonFlowPanel.Dock = DockStyle.Right;
+                        buttonFlowPanel.FlowDirection = FlowDirection.RightToLeft;
+                        buttonFlowPanel.WrapContents = false;
+                        buttonFlowPanel.AutoSize = true;
+                        buttonFlowPanel.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+
+                        buttonFlowPanel.Controls.Add(cancelButton);
+                        buttonFlowPanel.Controls.Add(okButton);
+                        buttonPanel.Controls.Add(buttonFlowPanel);
 
                         editDialog.Controls.Add(textBox);
-                        editDialog.Controls.Add(okButton);
-                        editDialog.Controls.Add(cancelButton);
+                        editDialog.Controls.Add(buttonPanel);
                         editDialog.AcceptButton = okButton;
                         editDialog.CancelButton = cancelButton;
 
