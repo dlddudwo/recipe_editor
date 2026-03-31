@@ -6,6 +6,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -51,6 +52,7 @@ namespace AMI_Manager.Forms.Main
 
         static string settingsFilePath = global::AMI_Manager.Properties.Resources.settingsFilePath;
         static string settingsFolderPath = global::AMI_Manager.Properties.Resources.settingFolderPath;
+        static readonly Encoding settingsEncoding = new UTF8Encoding(false);
 
 
         //string settingsFilePath = @"settings.txt";
@@ -67,6 +69,37 @@ namespace AMI_Manager.Forms.Main
 
         private System.Windows.Forms.TreeNode NodeSource;
         private System.Windows.Forms.TreeNode NodeTarget;
+        private const int NodePreviewMaxLength = 120;
+
+        private const int GWL_STYLE = -16;
+        private const int WS_HSCROLL = 0x00100000;
+        private const int TVS_NOHSCROLL = 0x8000;
+        private const int SB_HORZ = 0;
+        private static readonly IntPtr HWND_TOP = IntPtr.Zero;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOZORDER = 0x0004;
+        private const uint SWP_FRAMECHANGED = 0x0020;
+        private const int TV_FIRST = 0x1100;
+        private const int TVM_GETEDITCONTROL = TV_FIRST + 15;
+
+        [DllImport("user32.dll", EntryPoint = "GetWindowLong", SetLastError = true)]
+        private static extern int GetWindowLong32(IntPtr hWnd, int nIndex);
+
+        [DllImport("user32.dll", EntryPoint = "SetWindowLong", SetLastError = true)]
+        private static extern int SetWindowLong32(IntPtr hWnd, int nIndex, int dwNewLong);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool ShowScrollBar(IntPtr hWnd, int wBar, bool bShow);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
 
         public RecipeEditorForm(ManagerForm _managerForm)
         {
@@ -76,6 +109,7 @@ namespace AMI_Manager.Forms.Main
             CreateCustomTitleBar();
 
             treeViewJson.NodeMouseClick += TreeView_NodeMouseClick;
+            treeViewJson.AfterSelect += TreeViewJson_AfterSelect_ShowFullText;
             objectToolStripMenuItem.Click += objectToolStripMenuItem_Click;
             valueToolStripMenuItem.Click += valueToolStripMenuItem_Click;
             arrayToolStripMenuItem.Click += arrayToolStripMenuItem_Click;
@@ -85,17 +119,48 @@ namespace AMI_Manager.Forms.Main
 
 
             treeViewJson.AfterLabelEdit += new NodeLabelEditEventHandler(treeViewJson_AfterLabelEdit);
+            treeViewJson.BeforeLabelEdit += treeViewJson_BeforeLabelEdit;
             treeViewJson.GetType().GetProperty("DoubleBuffered", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(treeViewJson, true);
+            treeViewJson.Scrollable = true;
+            treeViewJson.ShowNodeToolTips = true;
+            treeViewJson.DrawMode = TreeViewDrawMode.Normal;
+            treeViewJson.HandleCreated += (s, e) => EnableTreeViewHorizontalScrollBar();
+            treeViewJson.Resize += (s, e) => EnableTreeViewHorizontalScrollBar();
+            AdjustTreeViewLayoutWidth();
 
             LoadPreviousFilePath();
             LoadPreviousFolderPath();
         }
 
+        private void EnableTreeViewHorizontalScrollBar()
+        {
+            int style = GetWindowLong32(treeViewJson.Handle, GWL_STYLE);
+            style |= WS_HSCROLL;
+            style &= ~TVS_NOHSCROLL;
+            SetWindowLong32(treeViewJson.Handle, GWL_STYLE, style);
+            SetWindowPos(treeViewJson.Handle, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+            ShowScrollBar(treeViewJson.Handle, SB_HORZ, true);
+        }
+
+        private void AdjustTreeViewLayoutWidth()
+        {
+            if (tableLayoutPanel1 == null || tableLayoutPanel1.ColumnStyles.Count < 3)
+                return;
+
+            if (tableLayoutPanel1.ColumnStyles[1].SizeType == SizeType.Percent &&
+                tableLayoutPanel1.ColumnStyles[2].SizeType == SizeType.Percent)
+            {
+                tableLayoutPanel1.ColumnStyles[1].Width = 45F; // TreeView 영역 확장
+                tableLayoutPanel1.ColumnStyles[2].Width = 22F; // Text 영역 축소
+            }
+        }
+
         private void LoadPreviousFilePath()
         {
-            if (File.Exists(settingsFilePath))
+            string previousFilePath = ReadSettingPath(settingsFilePath);
+            if (!string.IsNullOrWhiteSpace(previousFilePath))
             {
-                jsonFilePath = File.ReadAllText(settingsFilePath);
+                jsonFilePath = previousFilePath;
                 LoadJson(jsonFilePath);
                 PopulateTreeView();
             }
@@ -107,9 +172,10 @@ namespace AMI_Manager.Forms.Main
 
         private void LoadPreviousFolderPath()
         {
-            if (File.Exists(settingsFolderPath))
+            string previousFolderPath = ReadSettingPath(settingsFolderPath);
+            if (!string.IsNullOrWhiteSpace(previousFolderPath))
             {
-                string FolderPath = File.ReadAllText(settingsFolderPath);
+                string FolderPath = previousFolderPath;
                 LoadFilesToDataGridView(FolderPath);
             }
             else
@@ -133,10 +199,12 @@ namespace AMI_Manager.Forms.Main
                     string jsonText = System.IO.File.ReadAllText(json_path);
                     jsonObject = JObject.Parse(jsonText);
                     richTextBox_json.Text = jsonText;
+                    BeforeJsonText = jsonText;
                 }
                 else
                 {
                     jsonObject = new JObject();
+                    BeforeJsonText = jsonObject.ToString();
                 }
             }
             catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException || ex is Newtonsoft.Json.JsonException)
@@ -150,7 +218,9 @@ namespace AMI_Manager.Forms.Main
             treeViewJson.Nodes.Clear();
             TreeNode rootNode = new TreeNode("Root");
             AddNodes(jsonObject, rootNode);
+            UpdateNodeToolTips(rootNode);
             treeViewJson.Nodes.Add(rootNode);
+            EnableTreeViewHorizontalScrollBar();
             //treeView1.ExpandAll();
 
         }
@@ -164,8 +234,10 @@ namespace AMI_Manager.Forms.Main
                     TreeNode childNode;
                     if (property.Value is JValue value)
                     {
-                        string nodeText = $"{property.Name}:{property.Value}";
+                        string fullNodeText = $"{property.Name}:{property.Value}";
+                        string nodeText = ToNodePreview(fullNodeText);
                         childNode = new TreeNode(nodeText);
+                        childNode.Tag = fullNodeText;
                         string value_type = property.Value.Type.ToString();
 
                         if (value_type == "Float" || value_type == "Integer")
@@ -196,6 +268,7 @@ namespace AMI_Manager.Forms.Main
                     else
                     {
                         childNode = new TreeNode(property.Name);
+                        childNode.Tag = childNode.Text;
                         if (property.Value.Type == JTokenType.Array)
                         {
                             //childNode.Text = $"{property.Name}[{property.Value.Count()}]";
@@ -226,6 +299,7 @@ namespace AMI_Manager.Forms.Main
                     {
                         //childNode = new TreeNode($"[{i}] ({item.Count()})");
                         childNode = new TreeNode($"[{i}]");
+                        childNode.Tag = childNode.Text;
                         childNode.ImageIndex = 0;
                         childNode.SelectedImageIndex = 0;
                     }
@@ -233,12 +307,14 @@ namespace AMI_Manager.Forms.Main
                     {
                         //childNode = new TreeNode($"[{i}] ({item.Count()})");
                         childNode = new TreeNode($"[{i}]");
+                        childNode.Tag = childNode.Text;
                         childNode.ImageIndex = 2;
                         childNode.SelectedImageIndex = 2;
                     }
                     else
                     {
                         childNode = new TreeNode($"[{i}]:Value");
+                        childNode.Tag = childNode.Text;
                         childNode.ImageIndex = 1;
                         childNode.SelectedImageIndex = 1;
                     }
@@ -310,8 +386,108 @@ namespace AMI_Manager.Forms.Main
             TreeNode node = treeViewJson.GetNodeAt(e.X, e.Y);
             if (node != null)
             {
-                rtbNodeLocation.Text = GetNodePath(node, Get_node_mode.Inform);
+                rtbNodeLocation.Text = BuildNodeDetailText(node);
             }
+        }
+
+        private void TreeViewJson_AfterSelect_ShowFullText(object sender, TreeViewEventArgs e)
+        {
+            if (e.Node == null)
+                return;
+
+            rtbNodeLocation.Text = BuildNodeDetailText(e.Node);
+            ScrollRichTextToNode(e.Node);
+        }
+
+        private string BuildNodeDetailText(TreeNode node)
+        {
+            string nodePath = GetNodePath(node, Get_node_mode.Inform);
+            string fullNodeText = GetFullNodeText(node);
+
+            try
+            {
+                string selectPath = Select_json_path(node, Path_skip_mode.Skip).Replace("/", ".");
+                if (selectPath.Contains(":"))
+                {
+                    selectPath = selectPath.Substring(0, selectPath.LastIndexOf(':'));
+                }
+
+                JToken selectToken = selectPath == "Root" ? jsonObject.SelectToken("$") : jsonObject.SelectToken(selectPath);
+                if (selectToken != null)
+                {
+                    if (selectToken is JValue && selectToken.Parent is JProperty property)
+                    {
+                        fullNodeText = $"{property.Name}:{selectToken}";
+                    }
+                    else if (selectToken.Type != JTokenType.Object && selectToken.Type != JTokenType.Array)
+                    {
+                        fullNodeText = selectToken.ToString();
+                    }
+                }
+            }
+            catch
+            {
+                // 경로 해석 실패 시 기본 노드 텍스트를 그대로 사용
+            }
+
+            return $"NODE: {fullNodeText}{Environment.NewLine}PATH: {nodePath}";
+        }
+
+        private void ScrollRichTextToNode(TreeNode node)
+        {
+            if (jsonObject == null || string.IsNullOrWhiteSpace(richTextBox_json.Text))
+                return;
+
+            try
+            {
+                string selectPath = Select_json_path(node, Path_skip_mode.Skip).Replace("/", ".");
+                if (selectPath.Contains(":"))
+                {
+                    selectPath = selectPath.Substring(0, selectPath.LastIndexOf(':'));
+                }
+
+                JToken selectToken = selectPath == "Root" ? jsonObject.SelectToken("$") : jsonObject.SelectToken(selectPath);
+                string searchText = string.Empty;
+
+                if (selectToken?.Parent is JProperty property)
+                {
+                    searchText = $"\"{property.Name}\"";
+                }
+                else
+                {
+                    searchText = selectToken?.ToString() ?? string.Empty;
+                }
+
+                if (string.IsNullOrWhiteSpace(searchText))
+                    return;
+
+                int startIndex = richTextBox_json.Text.IndexOf(searchText, StringComparison.Ordinal);
+                if (startIndex < 0)
+                    return;
+
+                richTextBox_json.Select(startIndex, searchText.Length);
+                richTextBox_json.ScrollToCaret();
+            }
+            catch
+            {
+                // 선택 노드와 RichTextBox 매칭 실패 시 무시
+            }
+        }
+
+        private string ToNodePreview(string fullText)
+        {
+            if (string.IsNullOrEmpty(fullText))
+                return fullText;
+            if (fullText.Length <= NodePreviewMaxLength)
+                return fullText;
+            return fullText.Substring(0, NodePreviewMaxLength) + "...";
+        }
+
+        private string GetFullNodeText(TreeNode node)
+        {
+            if (node?.Tag is string fullText && !string.IsNullOrWhiteSpace(fullText))
+                return fullText;
+            return node?.Text ?? string.Empty;
         }
 
         private void TreeView_NodeMouseClick(object sender, TreeNodeMouseClickEventArgs e)
@@ -322,6 +498,27 @@ namespace AMI_Manager.Forms.Main
                 treeViewJson.SelectedNode = e.Node;
                 contextMenuStrip1.Show(treeViewJson, e.Location);
             }
+        }
+
+        private void treeViewJson_BeforeLabelEdit(object sender, NodeLabelEditEventArgs e)
+        {
+            BeginInvoke(new Action(() =>
+            {
+                if (e.Node == null)
+                    return;
+
+                IntPtr editHandle = SendMessage(treeViewJson.Handle, TVM_GETEDITCONTROL, IntPtr.Zero, IntPtr.Zero);
+                if (editHandle == IntPtr.Zero)
+                    return;
+
+                Rectangle bounds = e.Node.Bounds;
+                int editX = bounds.Left;
+                int editY = bounds.Top;
+                int editWidth = Math.Max(300, treeViewJson.ClientSize.Width - editX - 8);
+                int editHeight = Math.Max(bounds.Height + 6, 24);
+
+                MoveWindow(editHandle, editX, editY, editWidth, editHeight, true);
+            }));
         }
 
         private void objectToolStripMenuItem_Click(object sender, EventArgs e)
@@ -366,6 +563,8 @@ namespace AMI_Manager.Forms.Main
                     }
 
                     TreeNode newNode = new TreeNode(temp_object_str);
+                    newNode.ToolTipText = newNode.Text;
+                    newNode.Tag = temp_object_str;
                     treeViewJson.SelectedNode.Nodes.Add(newNode);
 
                     Add_Json(jsonObject, treeViewJson.SelectedNode, json_type.Obejct);
@@ -415,6 +614,8 @@ namespace AMI_Manager.Forms.Main
 
                     string temp_key_str = "NEW_KEY" + (treeViewJson.SelectedNode.Nodes.Count + 1).ToString(nodes_cnt) + ":" + "NEW_VALUE" + (treeViewJson.SelectedNode.Nodes.Count + 1).ToString(nodes_cnt);
                     TreeNode newNode = new TreeNode(temp_key_str);
+                    newNode.ToolTipText = newNode.Text;
+                    newNode.Tag = temp_key_str;
                     treeViewJson.SelectedNode.Nodes.Add(newNode);
 
                     Add_Json(jsonObject, treeViewJson.SelectedNode, json_type.Value);
@@ -467,6 +668,8 @@ namespace AMI_Manager.Forms.Main
 
                     string temp_array_str = "NEW_ARRAY" + (treeViewJson.SelectedNode.Nodes.Count + 1).ToString(nodes_cnt);
                     TreeNode newNode = new TreeNode(temp_array_str);
+                    newNode.ToolTipText = newNode.Text;
+                    newNode.Tag = temp_array_str;
                     treeViewJson.SelectedNode.Nodes.Add(newNode);
 
 
@@ -700,33 +903,49 @@ namespace AMI_Manager.Forms.Main
         {
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
             string jsonFilePathWithTimestamp = Path.Combine(Path.GetDirectoryName(jsonFilePath), Path.GetFileNameWithoutExtension(jsonFilePath) + "_" + timestamp + Path.GetExtension(jsonFilePath));
-            //if(BeforeJsonText != null) 
-            //    File.WriteAllText(jsonFilePathWithTimestamp, BeforeJsonText);
-            //else
-            //    File.WriteAllText(jsonFilePathWithTimestamp, jsonObject.ToString());
-            File.WriteAllText(jsonFilePathWithTimestamp, jsonObject.ToString());
+            string currentJsonText = jsonObject.ToString();
+            string backupSourceText = string.IsNullOrWhiteSpace(BeforeJsonText) ? currentJsonText : BeforeJsonText;
 
-            File.WriteAllText(jsonFilePath, jsonObject.ToString());
+            File.WriteAllText(jsonFilePathWithTimestamp, backupSourceText);
+            BeforeJsonText = currentJsonText;
+        }
+
+        private void ApplyJsonToCurrentFile()
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(jsonFilePath))
+                    return;
+
+                string currentJsonText = jsonObject.ToString();
+                File.WriteAllText(jsonFilePath, currentJsonText);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException || ex is IOException || ex is ArgumentException || ex is NotSupportedException)
+            {
+                MessageBox.Show(ex.Message, "WARNING");
+            }
         }
 
 
         static string GetNodePath(TreeNode node, Get_node_mode mode)
         {
-            string path = node.Text;
+            string path = node.Tag is string fullText ? fullText : node.Text;
             switch (mode)
             {
                 case Get_node_mode.Inform:
                     while (node.Parent != null)
                     {
                         node = node.Parent;
-                        path = node.Text + "->" + path;
+                        string nodeText = node.Tag is string nodeFullText ? nodeFullText : node.Text;
+                        path = nodeText + "->" + path;
                     }
                     break;
                 case Get_node_mode.Delete:
                     while (node.Parent != null)
                     {
                         node = node.Parent;
-                        path = node.Text + "/" + path;
+                        string nodeText = node.Tag is string nodeFullText ? nodeFullText : node.Text;
+                        path = nodeText + "/" + path;
                     }
                     break;
             }
@@ -892,6 +1111,11 @@ namespace AMI_Manager.Forms.Main
                     }
 
                 }
+                treeViewJson.SelectedNode.ToolTipText = treeViewJson.SelectedNode.Text;
+                treeViewJson.SelectedNode.Tag = new_key_value;
+                treeViewJson.SelectedNode.Text = ToNodePreview(new_key_value);
+                treeViewJson.SelectedNode.ToolTipText = new_key_value;
+                EnableTreeViewHorizontalScrollBar();
                 return;
             }
             catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException || ex is NullReferenceException || ex is Newtonsoft.Json.JsonException)
@@ -915,7 +1139,66 @@ namespace AMI_Manager.Forms.Main
         {
             if (e.KeyCode == Keys.F2 && treeViewJson.SelectedNode != null)
             {
-                treeViewJson.SelectedNode.BeginEdit();
+                string fullNodeText = GetFullNodeText(treeViewJson.SelectedNode);
+                if (fullNodeText.Contains(":"))
+                {
+                    e.SuppressKeyPress = true;
+                    using (var editDialog = new Form())
+                    using (var textBox = new TextBox())
+                    using (var buttonPanel = new Panel())
+                    using (var buttonFlowPanel = new FlowLayoutPanel())
+                    using (var okButton = new Button())
+                    using (var cancelButton = new Button())
+                    {
+                        editDialog.Text = "Node Edit";
+                        editDialog.StartPosition = FormStartPosition.CenterParent;
+                        editDialog.Size = new Size(900, 280);
+
+                        textBox.Multiline = true;
+                        textBox.ScrollBars = ScrollBars.None;
+                        textBox.WordWrap = true;
+                        textBox.AcceptsReturn = true;
+                        textBox.Dock = DockStyle.Fill;
+                        textBox.Text = fullNodeText;
+
+                        okButton.Text = "OK";
+                        okButton.DialogResult = DialogResult.OK;
+                        okButton.Size = new Size(80, 30);
+
+                        cancelButton.Text = "Cancel";
+                        cancelButton.DialogResult = DialogResult.Cancel;
+                        cancelButton.Size = new Size(80, 30);
+
+                        buttonPanel.Dock = DockStyle.Bottom;
+                        buttonPanel.Height = 42;
+                        buttonPanel.Padding = new Padding(0, 6, 10, 6);
+
+                        buttonFlowPanel.Dock = DockStyle.Right;
+                        buttonFlowPanel.FlowDirection = FlowDirection.RightToLeft;
+                        buttonFlowPanel.WrapContents = false;
+                        buttonFlowPanel.AutoSize = true;
+                        buttonFlowPanel.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+
+                        buttonFlowPanel.Controls.Add(cancelButton);
+                        buttonFlowPanel.Controls.Add(okButton);
+                        buttonPanel.Controls.Add(buttonFlowPanel);
+
+                        editDialog.Controls.Add(textBox);
+                        editDialog.Controls.Add(buttonPanel);
+                        editDialog.AcceptButton = okButton;
+                        editDialog.CancelButton = cancelButton;
+
+                        if (editDialog.ShowDialog(this) == DialogResult.OK)
+                        {
+                            var args = new NodeLabelEditEventArgs(treeViewJson.SelectedNode, textBox.Text);
+                            treeViewJson_AfterLabelEdit(this, args);
+                        }
+                    }
+                }
+                else
+                {
+                    treeViewJson.SelectedNode.BeginEdit();
+                }
             }
         }
 
@@ -934,6 +1217,12 @@ namespace AMI_Manager.Forms.Main
                     {
                         jsonFilePath = openFileDialog.FileName;
                         SaveFilePath(jsonFilePath);
+                        string jsonDirectory = Path.GetDirectoryName(jsonFilePath);
+                        if (!string.IsNullOrWhiteSpace(jsonDirectory))
+                        {
+                            SaveFolderPath(jsonDirectory);
+                            LoadFilesToDataGridView(jsonDirectory);
+                        }
                     }
                     LoadJson(jsonFilePath);
                     PopulateTreeView();
@@ -941,9 +1230,7 @@ namespace AMI_Manager.Forms.Main
                     break;
 
                 case "BtnApply":
-
-                    //SaveJson();
-                    //BeforeJsonText = richTextBox_json.Text;
+                    ApplyJsonToCurrentFile();
                     string jsonString = jsonObject.ToString();
                     richTextBox_json.Text = jsonString;
                     break;
@@ -952,8 +1239,17 @@ namespace AMI_Manager.Forms.Main
                     if (MessageBox.Show("수정한 내용을 Apply 했는지 확인하고 저장해주세요", "Save", MessageBoxButtons.YesNo) == DialogResult.Yes)
                     {
                         SaveJson();
-                        JsonfolderPath = File.ReadAllText(settingsFolderPath);
-                        LoadFilesToDataGridView(JsonfolderPath);
+                        JsonfolderPath = Path.GetDirectoryName(jsonFilePath);
+                        if (string.IsNullOrWhiteSpace(JsonfolderPath))
+                        {
+                            JsonfolderPath = ReadSettingPath(settingsFolderPath);
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(JsonfolderPath))
+                        {
+                            SaveFolderPath(JsonfolderPath);
+                            LoadFilesToDataGridView(JsonfolderPath);
+                        }
                     }
                     else
                     {
@@ -1054,12 +1350,49 @@ namespace AMI_Manager.Forms.Main
 
         static void SaveFilePath(string path)
         {
-            File.WriteAllText(settingsFilePath, path);
+            WriteSettingPath(settingsFilePath, path);
         }
 
         static void SaveFolderPath(string path)
         {
-            File.WriteAllText(settingsFolderPath, path);
+            WriteSettingPath(settingsFolderPath, path);
+        }
+
+        static string ReadSettingPath(string settingPath)
+        {
+            if (!File.Exists(settingPath))
+                return string.Empty;
+
+            string path = File.ReadAllText(settingPath, settingsEncoding).Trim();
+            if (string.IsNullOrWhiteSpace(path))
+                return string.Empty;
+
+            try
+            {
+                return Path.GetFullPath(path);
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException)
+            {
+                return string.Empty;
+            }
+        }
+
+        static void WriteSettingPath(string settingPath, string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+
+            string normalizedPath = path.Trim();
+            try
+            {
+                normalizedPath = Path.GetFullPath(normalizedPath);
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException)
+            {
+                return;
+            }
+
+            File.WriteAllText(settingPath, normalizedPath, settingsEncoding);
         }
 
  
@@ -1098,7 +1431,13 @@ namespace AMI_Manager.Forms.Main
         private void dataGridViewJson_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
         {
             string datagridview_jsonpath = dataGridViewJson.Rows[e.RowIndex].Cells[2].FormattedValue.ToString();
+            jsonFilePath = datagridview_jsonpath;
             SaveFilePath(datagridview_jsonpath);
+            string selectedFolderPath = Path.GetDirectoryName(datagridview_jsonpath);
+            if (!string.IsNullOrWhiteSpace(selectedFolderPath))
+            {
+                SaveFolderPath(selectedFolderPath);
+            }
             LoadJson(datagridview_jsonpath);
             PopulateTreeView();
         }
@@ -1127,6 +1466,7 @@ namespace AMI_Manager.Forms.Main
             foreach (TreeNode childNode in sourceNode.Nodes)
             {
                 TreeNode newNode = new TreeNode(childNode.Text);
+                newNode.ToolTipText = childNode.Text;
                 newNode.Tag = childNode.Tag;
                 newNode.ImageIndex = childNode.ImageIndex;
                 newNode.SelectedImageIndex = childNode.SelectedImageIndex;
@@ -1135,6 +1475,15 @@ namespace AMI_Manager.Forms.Main
                 CopyNodes(childNode, newNode);
             }
 
+        }
+
+        private void UpdateNodeToolTips(TreeNode node)
+        {
+            node.ToolTipText = node.Text;
+            foreach (TreeNode child in node.Nodes)
+            {
+                UpdateNodeToolTips(child);
+            }
         }
 
 
@@ -1308,5 +1657,3 @@ namespace AMI_Manager.Forms.Main
 
 
 }
-
-
