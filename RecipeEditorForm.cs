@@ -69,6 +69,7 @@ namespace AMI_Manager.Forms.Main
 
         private System.Windows.Forms.TreeNode NodeSource;
         private System.Windows.Forms.TreeNode NodeTarget;
+        private const int NodePreviewMaxLength = 120;
 
         private const int GWL_STYLE = -16;
         private const int WS_HSCROLL = 0x00100000;
@@ -233,8 +234,10 @@ namespace AMI_Manager.Forms.Main
                     TreeNode childNode;
                     if (property.Value is JValue value)
                     {
-                        string nodeText = $"{property.Name}:{property.Value}";
+                        string fullNodeText = $"{property.Name}:{property.Value}";
+                        string nodeText = ToNodePreview(fullNodeText);
                         childNode = new TreeNode(nodeText);
+                        childNode.Tag = fullNodeText;
                         string value_type = property.Value.Type.ToString();
 
                         if (value_type == "Float" || value_type == "Integer")
@@ -265,6 +268,7 @@ namespace AMI_Manager.Forms.Main
                     else
                     {
                         childNode = new TreeNode(property.Name);
+                        childNode.Tag = childNode.Text;
                         if (property.Value.Type == JTokenType.Array)
                         {
                             //childNode.Text = $"{property.Name}[{property.Value.Count()}]";
@@ -295,6 +299,7 @@ namespace AMI_Manager.Forms.Main
                     {
                         //childNode = new TreeNode($"[{i}] ({item.Count()})");
                         childNode = new TreeNode($"[{i}]");
+                        childNode.Tag = childNode.Text;
                         childNode.ImageIndex = 0;
                         childNode.SelectedImageIndex = 0;
                     }
@@ -302,12 +307,14 @@ namespace AMI_Manager.Forms.Main
                     {
                         //childNode = new TreeNode($"[{i}] ({item.Count()})");
                         childNode = new TreeNode($"[{i}]");
+                        childNode.Tag = childNode.Text;
                         childNode.ImageIndex = 2;
                         childNode.SelectedImageIndex = 2;
                     }
                     else
                     {
                         childNode = new TreeNode($"[{i}]:Value");
+                        childNode.Tag = childNode.Text;
                         childNode.ImageIndex = 1;
                         childNode.SelectedImageIndex = 1;
                     }
@@ -394,7 +401,7 @@ namespace AMI_Manager.Forms.Main
         private string BuildNodeDetailText(TreeNode node)
         {
             string nodePath = GetNodePath(node, Get_node_mode.Inform);
-            string fullNodeText = node.Text;
+            string fullNodeText = GetFullNodeText(node);
 
             try
             {
@@ -423,6 +430,22 @@ namespace AMI_Manager.Forms.Main
             }
 
             return $"NODE: {fullNodeText}{Environment.NewLine}PATH: {nodePath}";
+        }
+
+        private string ToNodePreview(string fullText)
+        {
+            if (string.IsNullOrEmpty(fullText))
+                return fullText;
+            if (fullText.Length <= NodePreviewMaxLength)
+                return fullText;
+            return fullText.Substring(0, NodePreviewMaxLength) + "...";
+        }
+
+        private string GetFullNodeText(TreeNode node)
+        {
+            if (node?.Tag is string fullText && !string.IsNullOrWhiteSpace(fullText))
+                return fullText;
+            return node?.Text ?? string.Empty;
         }
 
         private void TreeView_NodeMouseClick(object sender, TreeNodeMouseClickEventArgs e)
@@ -499,6 +522,7 @@ namespace AMI_Manager.Forms.Main
 
                     TreeNode newNode = new TreeNode(temp_object_str);
                     newNode.ToolTipText = newNode.Text;
+                    newNode.Tag = temp_object_str;
                     treeViewJson.SelectedNode.Nodes.Add(newNode);
 
                     Add_Json(jsonObject, treeViewJson.SelectedNode, json_type.Obejct);
@@ -549,6 +573,7 @@ namespace AMI_Manager.Forms.Main
                     string temp_key_str = "NEW_KEY" + (treeViewJson.SelectedNode.Nodes.Count + 1).ToString(nodes_cnt) + ":" + "NEW_VALUE" + (treeViewJson.SelectedNode.Nodes.Count + 1).ToString(nodes_cnt);
                     TreeNode newNode = new TreeNode(temp_key_str);
                     newNode.ToolTipText = newNode.Text;
+                    newNode.Tag = temp_key_str;
                     treeViewJson.SelectedNode.Nodes.Add(newNode);
 
                     Add_Json(jsonObject, treeViewJson.SelectedNode, json_type.Value);
@@ -602,6 +627,7 @@ namespace AMI_Manager.Forms.Main
                     string temp_array_str = "NEW_ARRAY" + (treeViewJson.SelectedNode.Nodes.Count + 1).ToString(nodes_cnt);
                     TreeNode newNode = new TreeNode(temp_array_str);
                     newNode.ToolTipText = newNode.Text;
+                    newNode.Tag = temp_array_str;
                     treeViewJson.SelectedNode.Nodes.Add(newNode);
 
 
@@ -861,21 +887,23 @@ namespace AMI_Manager.Forms.Main
 
         static string GetNodePath(TreeNode node, Get_node_mode mode)
         {
-            string path = node.Text;
+            string path = node.Tag is string fullText ? fullText : node.Text;
             switch (mode)
             {
                 case Get_node_mode.Inform:
                     while (node.Parent != null)
                     {
                         node = node.Parent;
-                        path = node.Text + "->" + path;
+                        string nodeText = node.Tag is string nodeFullText ? nodeFullText : node.Text;
+                        path = nodeText + "->" + path;
                     }
                     break;
                 case Get_node_mode.Delete:
                     while (node.Parent != null)
                     {
                         node = node.Parent;
-                        path = node.Text + "/" + path;
+                        string nodeText = node.Tag is string nodeFullText ? nodeFullText : node.Text;
+                        path = nodeText + "/" + path;
                     }
                     break;
             }
@@ -1042,6 +1070,9 @@ namespace AMI_Manager.Forms.Main
 
                 }
                 treeViewJson.SelectedNode.ToolTipText = treeViewJson.SelectedNode.Text;
+                treeViewJson.SelectedNode.Tag = new_key_value;
+                treeViewJson.SelectedNode.Text = ToNodePreview(new_key_value);
+                treeViewJson.SelectedNode.ToolTipText = new_key_value;
                 EnableTreeViewHorizontalScrollBar();
                 return;
             }
@@ -1066,7 +1097,53 @@ namespace AMI_Manager.Forms.Main
         {
             if (e.KeyCode == Keys.F2 && treeViewJson.SelectedNode != null)
             {
-                treeViewJson.SelectedNode.BeginEdit();
+                string fullNodeText = GetFullNodeText(treeViewJson.SelectedNode);
+                if (fullNodeText.Contains(":"))
+                {
+                    e.SuppressKeyPress = true;
+                    using (var editDialog = new Form())
+                    using (var textBox = new TextBox())
+                    using (var okButton = new Button())
+                    using (var cancelButton = new Button())
+                    {
+                        editDialog.Text = "Node Edit";
+                        editDialog.StartPosition = FormStartPosition.CenterParent;
+                        editDialog.Size = new Size(900, 280);
+
+                        textBox.Multiline = true;
+                        textBox.ScrollBars = ScrollBars.Both;
+                        textBox.WordWrap = false;
+                        textBox.Dock = DockStyle.Top;
+                        textBox.Height = 180;
+                        textBox.Text = fullNodeText;
+
+                        okButton.Text = "OK";
+                        okButton.DialogResult = DialogResult.OK;
+                        okButton.Dock = DockStyle.Left;
+                        okButton.Width = 120;
+
+                        cancelButton.Text = "Cancel";
+                        cancelButton.DialogResult = DialogResult.Cancel;
+                        cancelButton.Dock = DockStyle.Right;
+                        cancelButton.Width = 120;
+
+                        editDialog.Controls.Add(textBox);
+                        editDialog.Controls.Add(okButton);
+                        editDialog.Controls.Add(cancelButton);
+                        editDialog.AcceptButton = okButton;
+                        editDialog.CancelButton = cancelButton;
+
+                        if (editDialog.ShowDialog(this) == DialogResult.OK)
+                        {
+                            var args = new NodeLabelEditEventArgs(treeViewJson.SelectedNode, textBox.Text);
+                            treeViewJson_AfterLabelEdit(this, args);
+                        }
+                    }
+                }
+                else
+                {
+                    treeViewJson.SelectedNode.BeginEdit();
+                }
             }
         }
 
