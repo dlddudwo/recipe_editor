@@ -110,6 +110,7 @@ namespace AMI_Manager.Forms.Main
 
             treeViewJson.NodeMouseClick += TreeView_NodeMouseClick;
             treeViewJson.AfterSelect += TreeViewJson_AfterSelect_ShowFullText;
+            listView_SearchResult.SelectedIndexChanged += listView_SearchResult_SelectedIndexChanged;
             objectToolStripMenuItem.Click += objectToolStripMenuItem_Click;
             valueToolStripMenuItem.Click += valueToolStripMenuItem_Click;
             arrayToolStripMenuItem.Click += arrayToolStripMenuItem_Click;
@@ -396,7 +397,6 @@ namespace AMI_Manager.Forms.Main
                 return;
 
             rtbNodeLocation.Text = BuildNodeDetailText(e.Node);
-            ScrollRichTextToNode(e.Node);
         }
 
         private string BuildNodeDetailText(TreeNode node)
@@ -431,47 +431,6 @@ namespace AMI_Manager.Forms.Main
             }
 
             return $"NODE: {fullNodeText}{Environment.NewLine}PATH: {nodePath}";
-        }
-
-        private void ScrollRichTextToNode(TreeNode node)
-        {
-            if (jsonObject == null || string.IsNullOrWhiteSpace(richTextBox_json.Text))
-                return;
-
-            try
-            {
-                string selectPath = Select_json_path(node, Path_skip_mode.Skip).Replace("/", ".");
-                if (selectPath.Contains(":"))
-                {
-                    selectPath = selectPath.Substring(0, selectPath.LastIndexOf(':'));
-                }
-
-                JToken selectToken = selectPath == "Root" ? jsonObject.SelectToken("$") : jsonObject.SelectToken(selectPath);
-                string searchText = string.Empty;
-
-                if (selectToken?.Parent is JProperty property)
-                {
-                    searchText = $"\"{property.Name}\"";
-                }
-                else
-                {
-                    searchText = selectToken?.ToString() ?? string.Empty;
-                }
-
-                if (string.IsNullOrWhiteSpace(searchText))
-                    return;
-
-                int startIndex = richTextBox_json.Text.IndexOf(searchText, StringComparison.Ordinal);
-                if (startIndex < 0)
-                    return;
-
-                richTextBox_json.Select(startIndex, searchText.Length);
-                richTextBox_json.ScrollToCaret();
-            }
-            catch
-            {
-                // 선택 노드와 RichTextBox 매칭 실패 시 무시
-            }
         }
 
         private string ToNodePreview(string fullText)
@@ -1202,6 +1161,56 @@ namespace AMI_Manager.Forms.Main
             }
         }
 
+        private void PopulateNodeSearchResults(string searchText)
+        {
+            listView_SearchResult.Items.Clear();
+            listView_SearchResult.View = View.List;
+
+            if (string.IsNullOrWhiteSpace(searchText))
+                return;
+
+            var matchedNodes = new List<TreeNode>();
+            CollectMatchedNodes(treeViewJson.Nodes, searchText.ToLower(), matchedNodes);
+
+            foreach (TreeNode node in matchedNodes)
+            {
+                string path = GetNodePath(node, Get_node_mode.Inform);
+                string nodeText = GetFullNodeText(node);
+                string displayText = $"{path} | {nodeText}";
+                ListViewItem item = new ListViewItem(displayText);
+                item.Tag = node;
+                listView_SearchResult.Items.Add(item);
+            }
+        }
+
+        private void CollectMatchedNodes(TreeNodeCollection nodes, string lowerSearchText, List<TreeNode> matchedNodes)
+        {
+            foreach (TreeNode node in nodes)
+            {
+                string fullNodeText = GetFullNodeText(node).ToLower();
+                if (fullNodeText.Contains(lowerSearchText))
+                {
+                    matchedNodes.Add(node);
+                }
+
+                CollectMatchedNodes(node.Nodes, lowerSearchText, matchedNodes);
+            }
+        }
+
+        private void listView_SearchResult_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (listView_SearchResult.SelectedItems.Count == 0)
+                return;
+
+            var selectedItem = listView_SearchResult.SelectedItems[0];
+            if (selectedItem.Tag is TreeNode matchedNode)
+            {
+                treeViewJson.SelectedNode = matchedNode;
+                matchedNode.EnsureVisible();
+                treeViewJson.Focus();
+            }
+        }
+
         private void Button_Click(object sender, EventArgs e)
         {
 
@@ -1258,18 +1267,16 @@ namespace AMI_Manager.Forms.Main
                     if (foundNode != null)
                     {
                         treeViewJson.SelectedNode = foundNode;
-                        //foundNode.EnsureVisible();
+                        foundNode.EnsureVisible();
                         treeViewJson.Focus();
                     }
                     else
                     {
                         MessageBox.Show("Node not found.", "WARNING");
                     }
-                    ////////////////
-
-                    searchResults = richTextBox_json.Lines.Where(line => line.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
-                    currentIndex = 0;
-                    DisplayCurrentResult();
+                    PopulateNodeSearchResults(searchText);
+                    searchResults.Clear();
+                    currentIndex = -1;
 
                     break;
 
@@ -1438,20 +1445,7 @@ namespace AMI_Manager.Forms.Main
 
         private void SearchButton_Click(object sender, EventArgs e)
         {
-            string searchText = textBoxSearch.Text;
-            string richText = richTextBox_json.Text;
-
-            listView_SearchResult.Items.Clear();
-            listView_SearchResult.View = View.List;
-
-            int startIndex = 0;
-            int OrderNum = 0;
-            while ((startIndex = richText.IndexOf(searchText, startIndex)) != -1)
-            {
-                listView_SearchResult.Items.Add(new System.Windows.Forms.ListViewItem($"위치: {OrderNum + 1}, 텍스트: {searchText}"));
-                startIndex += searchText.Length;
-                OrderNum++;
-            }
+            PopulateNodeSearchResults(textBoxSearch.Text);
         }
 
         private void CopyNodes(TreeNode sourceNode, TreeNode targetNode)
